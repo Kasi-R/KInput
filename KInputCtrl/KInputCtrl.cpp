@@ -17,11 +17,10 @@
 
 #include "KInputCtrl.hpp"
 
-std::string KInputPath = R"(C:\Users\Kasi\Desktop\KInput\bin\Release\KInput.dll)";
-
-KInputCtrl::KInputCtrl(DWORD PID) : Injector(PID)
+KInputCtrl::KInputCtrl(DWORD PID, std::string Path) : Injector(PID)
 {
-    this->Load(KInputPath);
+    this->FileName = Path + "\\KInput.dll";
+    this->DLL = this->Load(FileName);
 }
 
 bool KInputCtrl::FocusEvent(std::int32_t ID)
@@ -32,7 +31,7 @@ bool KInputCtrl::FocusEvent(std::int32_t ID)
     };
     FocusEvent Event;
     Event.ID = ID;
-    return this->CallExport(KInputPath, "KInput_FocusEvent", &Event, sizeof(Event));
+    return this->CallExport(this->DLL, "KInput_FocusEvent", &Event, sizeof(Event));
 }
 
 bool KInputCtrl::KeyEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t KeyCode,
@@ -54,7 +53,7 @@ bool KInputCtrl::KeyEvent(std::int32_t ID, std::int64_t When, std::int32_t Modif
     Event.KeyCode = KeyCode;
     Event.KeyChar = KeyChar;
     Event.KeyLocation = KeyLocation;
-    return this->CallExport(KInputPath, "KInput_KeyEvent", &Event, sizeof(Event));
+    return this->CallExport(this->DLL, "KInput_KeyEvent", &Event, sizeof(Event));
 }
 
 bool KInputCtrl::MouseEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t X,
@@ -80,7 +79,7 @@ bool KInputCtrl::MouseEvent(std::int32_t ID, std::int64_t When, std::int32_t Mod
     Event.ClickCount = ClickCount;
     Event.PopupTrigger = PopupTrigger;
     Event.Button = Button;
-    return this->CallExport(KInputPath, "KInput_MouseEvent", &Event, sizeof(Event));
+    return this->CallExport(this->DLL, "KInput_MouseEvent", &Event, sizeof(Event));
 }
 
 bool KInputCtrl::MouseWheelEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t X,
@@ -111,10 +110,10 @@ bool KInputCtrl::MouseWheelEvent(std::int32_t ID, std::int64_t When, std::int32_
     Event.ScrollType = ScrollType;
     Event.ScrollAmount = ScrollAmount;
     Event.WheelRotation = WheelRotation;
-    return this->CallExport(KInputPath, "KInput_MouseWheelEvent", &Event, sizeof(Event));
+    return this->CallExport(this->DLL, "KInput_MouseWheelEvent", &Event, sizeof(Event));
 }
 
 KInputCtrl::~KInputCtrl()
 {
-    this->Free(KInputPath);
+    this->Free(this->FileName);
 }

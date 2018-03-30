@@ -14,8 +14,10 @@ class Injector
         void* GetRemoteProcAddress(void* DLL, std::string ProcName);
     public:
         Injector(DWORD PID);
-        bool Load(std::string DLLPath);
+        void* Load(std::string DLLPath);
+        bool CallExport(void* DLL, std::string ProcName, void* Data, std::uint32_t Size);
         bool CallExport(std::string DLL, std::string ProcName, void* Data, std::uint32_t Size);
+
 
         bool Free(std::string DLLPath);
         ~Injector();

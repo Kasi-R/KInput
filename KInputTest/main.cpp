@@ -18,9 +18,9 @@
 #include <iostream>
 #include <windows.h>
 #include <chrono>
-#define OSRSPID 18436
+#define OSRSPID 9892
 
-std::string KInputCtrlPath = R"(C:\Users\Kasi\Desktop\KInputCtrl\bin\Release\KInputCtrl.dll)";
+std::string KInputCtrlPath = R"(D:\Dropbox\KInput\KInputCtrl\bin\Release\KInputCtrl.dll)";
 
 typedef enum Focus_Event
 {
@@ -44,7 +44,6 @@ typedef enum Mouse_Event
     MOUSE_WHEEL = 507
 } Mouse_Event;
 
-
 typedef enum Key_Event
 {
     KEY_TYPED = 400,
@@ -59,6 +58,7 @@ std::uint64_t CurrentTimeMillis()
 
 int main()
 {
+    std::cout << CurrentTimeMillis() << std::endl;
     void* KInputCtrl = LoadLibrary(KInputCtrlPath.c_str());
     if (KInputCtrl)
     {
@@ -91,8 +91,9 @@ int main()
 
         if (KInput_Create(OSRSPID))
         {
-            /*KInput_KeyEvent(OSRSPID, 400, CurrentTimeMillis(), 0, 0, 'K', 0);
-            KInput_MouseEvent(OSRSPID, Mouse_Event::MOUSE_PRESS, CurrentTimeMillis(), 0, 400, 400, 1, false, Mouse_Event::BUTTON1);
+
+            KInput_MouseEvent(OSRSPID, Mouse_Event::MOUSE_PRESS, CurrentTimeMillis(), 0, 485, 290, 1, false, Mouse_Event::BUTTON1);
+/*KInput_KeyEvent(OSRSPID, 400, CurrentTimeMillis(), 0, 0, 'K', 0);
             KInput_FocusEvent(OSRSPID, Focus_Event::GAINED);
             KInput_MouseEvent(OSRSPID, Mouse_Event::MOUSE_MOVE, CurrentTimeMillis(), 0, 400, 400, 0, false, Mouse_Event::NOBUTTON);
             KInput_MouseWheelEvent(OSRSPID, Mouse_Event::MOUSE_WHEEL, CurrentTimeMillis(), 0, 100, 100, 0, false, 0, 3, 3);
@@ -102,6 +103,6 @@ int main()
         }
 
         FreeLibrary((HMODULE)KInputCtrl);
-    }
+    } else
     return 0;
 }

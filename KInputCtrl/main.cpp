@@ -18,9 +18,51 @@
 #include <windows.h>
 #include <map>
 #include <iostream>
+#include <chrono>
 #include "KInputCtrl.hpp"
 
-std::map<DWORD, KInputCtrl*> Clients;
+static HMODULE This = nullptr;
+static std::map<DWORD, KInputCtrl*> Clients;
+
+static const char* SimbaExports[] =
+{
+    "KInput_Create", "function KInput_Create(PID : Int32) : Boolean;",
+    "KInput_Delete", "function KInput_Delete(PID : Int32) : Boolean;",
+    "KInput_FocusEvent", "function KInput_FocusEvent(PID : Int32; ID : Int32) : Boolean;",
+    "KInput_KeyEvent", "function KInput_KeyEvent(PID : Int32; ID : Int32; When : Int64; Modifiers : Int32; KeyCode : Int32; KeyChar : UInt16; KeyLocation : Int32) : Boolean;",
+    "KInput_MouseEvent", "function KInput_MouseEvent(PID : Int32; ID : Int32; When : Int64; Modifiers : Int32; X : Int32; Y : Int32; ClickCount : Int32; PopupTrigger : Boolean; Button : Int32) : Boolean;",
+    "KInput_MouseWheelEvent", "function KInput_MouseWheelEvent(PID : Int32; ID : Int32; When : Int64; Modifiers : Int32; X : Int32; Y : Int32; ClickCount : Int32; PopupTrigger : Boolean; ScrollType : Int32; ScrollAmount : Int32; WheelRotation : Int32) : Boolean;",
+    "KInput_CurrentTimeMS", "function KInput_CurrentTimeMS() : Int64;"
+};
+
+static constexpr std::int32_t ExportSize = ((sizeof(SimbaExports) / 2) / sizeof(const char*));
+
+extern "C"
+__declspec(dllexport)
+std::int32_t GetPluginABIVersion()
+{
+    return 2;
+}
+
+extern "C"
+__declspec(dllexport)
+std::int32_t GetFunctionCount()
+{
+    return ExportSize;
+}
+
+extern "C"
+__declspec(dllexport)
+std::int32_t GetFunctionInfo(std::int32_t Index, void* &Address, char* &Definition)
+{
+    if (Index < ExportSize)
+    {
+        Address = (void*)GetProcAddress(This, SimbaExports[Index * 2]);
+        strcpy(Definition, SimbaExports[(Index * 2) + 1]);
+        return Index;
+    }
+    return -1;
+}
 
 extern "C"
 __declspec(dllexport)
@@ -28,7 +70,10 @@ bool KInput_Create(DWORD PID)
 {
     if (!Clients.count(PID))
     {
-        Clients[PID] = new KInputCtrl(PID);
+        std::string FilePath(MAX_PATH, '\0');
+        GetModuleFileName(This, FilePath.data(), FilePath.size());
+        FilePath = FilePath.substr(0, FilePath.find_last_of("/\\"));
+        Clients[PID] = new KInputCtrl(PID, FilePath);
         return true;
     }
     return false;
@@ -89,13 +134,21 @@ bool KInput_MouseWheelEvent(DWORD PID, std::int32_t ID, std::int64_t When, std::
     return Clients[PID]->MouseWheelEvent(ID, When, Modifiers, X, Y, ClickCount, PopupTrigger, ScrollType, ScrollAmount, WheelRotation);
 }
 
-BOOL __stdcall DllMain(HMODULE DLL, DWORD fdwReason, LPVOID lpvReserved)
+extern "C"
+__declspec(dllexport)
+std::int64_t KInput_CurrentTimeMS()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+bool __stdcall DllMain(HMODULE DLL, DWORD fdwReason, LPVOID lpvReserved)
 {
     switch (fdwReason)
     {
         case DLL_PROCESS_ATTACH:
             {
-                DisableThreadLibraryCalls(DLL);
+                This = DLL;
+                DisableThreadLibraryCalls(This);
             }
             break;
         case DLL_PROCESS_DETACH:

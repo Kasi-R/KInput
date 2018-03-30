@@ -74,13 +74,13 @@ void* Injector::GetRemoteProcAddress(void* DLL, std::string ProcName)
     return Result;
 }
 
-bool Injector::Load(std::string DLLPath)
+void* Injector::Load(std::string DLLPath)
 {
-    bool Result = false;
+    void* Result = nullptr;
     if (!this->ProcessHandle)
         return Result;
     if (Modules.count(DLLPath))
-        return true;
+        return Modules[DLLPath];
     void* LoadLib = (void*)GetProcAddress(GetModuleHandle("Kernel32.dll"), "LoadLibraryA");
     if (LoadLib)
     {
@@ -99,7 +99,7 @@ bool Injector::Load(std::string DLLPath)
                         if (DLL)
                         {
                             Modules[DLLPath] = DLL;
-                            Result = true;
+                            Result = DLL;
                         }
                     }
                     CloseHandle(RemoteThread);
@@ -117,8 +117,16 @@ bool Injector::CallExport(std::string DLLPath, std::string ProcName, void* Data,
     if (!this->ProcessHandle)
         return Result;
     if (!Modules.count(DLLPath))
-        return true;
+        return Result;
     void* DLL = Modules[DLLPath];
+    return this->CallExport(DLL, ProcName, Data, Size);
+}
+
+bool Injector::CallExport(void* DLL, std::string ProcName, void* Data, std::uint32_t Size)
+{
+    bool Result = false;
+    if (!DLL)
+        return Result;
     void* Func = GetRemoteProcAddress(DLL, ProcName);
     if (Func)
     {
@@ -168,7 +176,6 @@ bool Injector::Free(std::string DLLPath)
             CloseHandle(RemoteThread);
         }
     }
-
     return Result;
 }
 

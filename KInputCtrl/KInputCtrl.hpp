@@ -1,15 +1,16 @@
 #ifndef KINPUTCTRL_HPP_INCLUDED
 #define KINPUTCTRL_HPP_INCLUDED
 
-
 #include "Injector.hpp"
 
 class KInputCtrl : private Injector
 {
     private:
         DWORD PID;
+        void* DLL;
+        std::string FileName;
     public:
-        KInputCtrl(DWORD PID);
+        KInputCtrl(DWORD PID, std::string Path);
         bool FocusEvent(std::int32_t ID);
         bool KeyEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t KeyCode,
                       std::uint16_t KeyChar, std::int32_t KeyLocation);

@@ -102,7 +102,7 @@ bool KInput_MouseWheelEvent(void* Data)
                                   Event->ScrollAmount, Event->WheelRotation);
 }
 
-BOOL __stdcall DllMain(HMODULE DLL, DWORD fdwReason, LPVOID lpvReserved)
+bool __stdcall DllMain(HMODULE DLL, DWORD fdwReason, LPVOID lpvReserved)
 {
     switch (fdwReason)
     {
