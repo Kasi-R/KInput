@@ -68,7 +68,7 @@ HWND GetCanvasHWND()
                 }
             }
         }
-        if (C != 3)
+        if (C < 2)
             CanvasHandle = nullptr;
     }
     return CanvasHandle;
@@ -96,44 +96,50 @@ KInput::KInput()
         return;
     typedef int (*ptr_GCJavaVMs)(JavaVM **vmBuf, jsize bufLen, jsize * nVMs);
     ptr_GCJavaVMs GetJVMs = (ptr_GCJavaVMs)GetProcAddress(JVMDLL, "JNI_GetCreatedJavaVMs");
-    GetJVMs(&(this->JVM), 1, nullptr);
-    if (this->JVM)
-    {
-        HMODULE JAWTDLL = GetModuleHandle("jawt.dll");
-        typedef jboolean (JNICALL *ptr_GetAWT)(JNIEnv* env, JAWT* awt);
-        ptr_GetAWT GetAWT = (ptr_GetAWT)GetProcAddress(JAWTDLL, "_JAWT_GetAWT@8");
-        if (this->AttachThread())
+    jobject TempCanvas = nullptr;
+    do {
+        GetJVMs(&(this->JVM), 1, nullptr);
+        if (!this->JVM)
+            break;
+
+        HMODULE AWTDLL = GetModuleHandle("awt.dll");
+        if (!AWTDLL)
+            break;
+
+        typedef jobject (JNICALL *ptr_GetComponent)(JNIEnv* env, void* platformInfo);
+        ptr_GetComponent GetComponent = (ptr_GetComponent)GetProcAddress(AWTDLL, "_DSGetComponent@8");
+        if (!(this->AttachThread() && GetComponent))
+            break;
+
+        HWND CanvasHWND = GetCanvasHWND();
+        if (!CanvasHWND)
+            break;
+
+        TempCanvas = GetComponent(this->Thread, (void*)CanvasHWND);
+        if (!TempCanvas)
+            break;
+
+        this->Canvas = this->Thread->NewGlobalRef(TempCanvas);
+        if (!this->Canvas)
+            break;
+
+        jclass CanvasClass = this->Thread->GetObjectClass(this->Canvas);
+        if (!CanvasClass)
+            break;
+
+        jmethodID Canvas_getParent = this->Thread->GetMethodID(CanvasClass, "getParent", "()Ljava/awt/Container;");
+        jobject TempClient = (jstring)this->Thread->CallObjectMethod(this->Canvas, Canvas_getParent);
+        if (TempClient)
         {
-            memset(&(this->Toolkit), 0, sizeof(this->Toolkit));
-            this->Toolkit.version = JAWT_VERSION_1_4;
-            GetAWT(this->Thread, &(this->Toolkit));
-            HWND CanvasHWND = GetCanvasHWND();
-            if (CanvasHWND)
-            {
-                jobject TempCanvas = this->Toolkit.GetComponent(this->Thread, (void*)CanvasHWND);
-                if (TempCanvas)
-                {
-                    this->Canvas = this->Thread->NewGlobalRef(TempCanvas);
-                    if (this->Canvas)
-                    {
-                        jclass CanvasClass = this->Thread->GetObjectClass(this->Canvas);
-                        if (CanvasClass)
-                        {
-                            jmethodID Canvas_getParent = this->Thread->GetMethodID(CanvasClass, "getParent", "()Ljava/awt/Container;");
-                            jobject TempClient = (jstring)this->Thread->CallObjectMethod(this->Canvas, Canvas_getParent);
-                            if (TempClient)
-                            {
-                                this->Client = this->Thread->NewGlobalRef(TempClient);
-                                this->Initialized = true;
-                                this->Thread->DeleteLocalRef(TempClient);
-                            }
-                            this->Thread->DeleteLocalRef(CanvasClass);
-                        }
-                    }
-                    this->Thread->DeleteLocalRef(TempCanvas);
-                }
-            }
+            this->Client = this->Thread->NewGlobalRef(TempClient);
+            this->Initialized = true;
+            this->Thread->DeleteLocalRef(TempClient);
         }
+        this->Thread->DeleteLocalRef(CanvasClass);
+    } while (false);
+    if (TempCanvas) {
+        this->Thread->DeleteLocalRef(TempCanvas);
+        TempCanvas = nullptr;
     }
 }
 
