@@ -2,7 +2,6 @@
 #define KINPUT_HPP_INCLUDED
 
 #include <jni.h>
-#include <jawt.h>
 #include <cstdint>
 
 class KInput
@@ -11,7 +10,6 @@ class KInput
         bool Initialized;
         JavaVM* JVM;
         JNIEnv* Thread;
-        JAWT Toolkit;
         jobject Client;
         jobject Canvas;
 
