@@ -74,23 +74,7 @@ HWND GetCanvasHWND()
     return CanvasHandle;
 }
 
-KInput::KInput()
-{
-    this->Initialized = false;
-    this->JVM = nullptr;
-    this->Thread = nullptr;
-    this->Client = nullptr;
-    this->Canvas = nullptr;
-    this->Canvas_Class = nullptr;
-    this->Canvas_DispatchEvent = nullptr;
-    this->FocusEvent_Class = nullptr;
-    this->FocusEvent_Init = nullptr;
-    this->KeyEvent_Class = nullptr;
-    this->KeyEvent_Init = nullptr;
-    this->MouseEvent_Class = nullptr;
-    this->MouseEvent_Init = nullptr;
-    this->MouseWheelEvent_Class = nullptr;
-    this->MouseWheelEvent_Init = nullptr;
+void KInput::GrabCanvas() {
     HMODULE JVMDLL = GetModuleHandle("jvm.dll");
     if (!JVMDLL)
         return;
@@ -141,6 +125,27 @@ KInput::KInput()
         this->Thread->DeleteLocalRef(TempCanvas);
         TempCanvas = nullptr;
     }
+}
+
+KInput::KInput()
+{
+    std::cout << "Starting a new KInput instance! o/" << std::endl;
+    this->Initialized = false;
+    this->JVM = nullptr;
+    this->Thread = nullptr;
+    this->Client = nullptr;
+    this->Canvas = nullptr;
+    this->Canvas_Class = nullptr;
+    this->Canvas_DispatchEvent = nullptr;
+    this->FocusEvent_Class = nullptr;
+    this->FocusEvent_Init = nullptr;
+    this->KeyEvent_Class = nullptr;
+    this->KeyEvent_Init = nullptr;
+    this->MouseEvent_Class = nullptr;
+    this->MouseEvent_Init = nullptr;
+    this->MouseWheelEvent_Class = nullptr;
+    this->MouseWheelEvent_Init = nullptr;
+    this->GrabCanvas();
 }
 
 bool KInput::AttachThread()

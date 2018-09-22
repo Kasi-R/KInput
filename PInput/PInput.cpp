@@ -1,7 +1,19 @@
-//
-// Created by Andre on 7/10/2018.
-//
+/*
+    Copyright (C) <2018>  <Andre>
 
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 #include <chrono>
 #include <random>
 #include <algorithm>
@@ -54,7 +66,7 @@ static std::uint32_t TypableKeyCodes[] = {
 /**
  * Translates the Simba mouse position to Mouse events
  */
-static std::int32_t MouseTranslation[] = {1, 3, 2};
+static std::int32_t MouseTranslation[] = {3, 1, 2};
 
 /**
  * Utilities
@@ -242,7 +254,6 @@ bool PInput::KeyUp(std::int32_t KeyCode)
     HeldKey KeyHeld(KeyCode);
     if (IsKeyDown(KeyCode))
     {
-        std::cout << "Removing key!" << std::endl;
         SetKeyDown(KeyHeld, false);
         KInput->KeyEvent(KEY_RELEASED, CurrentTimeMillis(), ShiftDown ? SHIFT_DOWN_MASK : 0, KeyCode, ToChar(KeyCode, ShiftDown), KEY_LOCATION_STANDARD);
         if (VK_SHIFT == KeyCode)
@@ -281,6 +292,10 @@ void PInput::KeySenderRun()
 
 bool PInput::PressKey(std::int32_t KeyCode)
 {
+    if (!IsFocused())
+    {
+        GainFocus();
+    }
     ReplaceJavaEnter(&KeyCode);
     // Craft the order of events
     this->KInput->KeyEvent(KEY_PRESSED, CurrentTimeMillis(), ShiftDown ? SHIFT_DOWN_MASK : 0, KeyCode, ToChar(KeyCode, ShiftDown), KEY_LOCATION_STANDARD);
@@ -443,7 +458,7 @@ bool PInput::HoldMouse(std::int32_t X, std::int32_t Y, std::int32_t ClickType)
         }
         MoveMouse(X, Y);
         KInput->MouseEvent(MOUSE_PRESSED, CurrentTimeMillis(), ButtonMask, this->X, this->Y, 1, false, Button);
-        if (!Focused)
+        if (!IsFocused())
         {
             Wait(25, 50);
             GainFocus();

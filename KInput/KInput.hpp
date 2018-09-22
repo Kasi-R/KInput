@@ -29,6 +29,7 @@ class KInput
         jmethodID MouseWheelEvent_Init;
 
         bool AttachThread();
+        void GrabCanvas();
     public:
         KInput();
 
@@ -42,7 +43,6 @@ class KInput
                              std::int32_t Y, std::int32_t ClickCount, bool PopupTrigger, std::int32_t ScrollType,
                              std::int32_t ScrollAmount, std::int32_t WheelRotation);
         ~KInput();
-
 };
 
 #endif // KINPUT_HPP_INCLUDED
