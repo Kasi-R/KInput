@@ -17,9 +17,61 @@
 
 #include <windows.h>
 #include <iostream>
+#include <MinHook.h>
 #include "KInput.hpp"
 
 KInput* Input = nullptr;
+
+typedef HWND(__stdcall *ptr_CreateWindowExW)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
+
+ptr_CreateWindowExW CreateWindowExW_Original = nullptr;
+LPVOID *CreateWindowExW_Address = nullptr;
+
+HWND __stdcall CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
+{
+    HWND Temp = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    std::wstring WStr(lpClassName);
+    std::string ClassNameString(WStr.begin(), WStr.end());
+    if (ClassNameString == "SunAwtCanvas" && Input) {
+        Input->NotifyCanvasUpdate(Temp);
+    }
+    return Temp;
+}
+
+bool HookCreateWindow() {
+    HMODULE kernel = GetModuleHandle("user32.dll");
+    CreateWindowExW_Address = (LPVOID *) GetProcAddress(kernel, "CreateWindowExW");
+    if (!CreateWindowExW_Address) {
+        return false;
+    }
+
+    // Initialize MinHook.
+    if (MH_Initialize() != MH_OK)
+    {
+        return false;
+    }
+
+    // Create a hook for MessageBoxW, in disabled state.
+    if (MH_CreateHook(CreateWindowExW_Address, ((LPVOID *) &CreateWindowExW_Hook),
+                      ((LPVOID *) &CreateWindowExW_Original)) != MH_OK)
+    {
+        return false;
+    }
+
+    // Enable the hook for CreateWindowExW.
+    return MH_EnableHook(CreateWindowExW_Address) == MH_OK;
+}
+
+bool UnHookCreateWindow() {
+    // Disable the hook.
+    if (MH_DisableHook(CreateWindowExW_Address) != MH_OK)
+    {
+        return false;
+    }
+
+    // Uninitialize MinHook.
+    return MH_Uninitialize() == MH_OK;
+}
 
 extern "C"
 __declspec(dllexport)
@@ -109,6 +161,7 @@ bool __stdcall DllMain(HMODULE DLL, DWORD fdwReason, LPVOID lpvReserved)
         case DLL_PROCESS_ATTACH:
             {
                 DisableThreadLibraryCalls(DLL);
+                HookCreateWindow();
                 Input = new KInput();
             }
             break;
@@ -116,6 +169,7 @@ bool __stdcall DllMain(HMODULE DLL, DWORD fdwReason, LPVOID lpvReserved)
             {
                 if (Input)
                 {
+                    UnHookCreateWindow();
                     delete Input;
                     Input = nullptr;
                 }

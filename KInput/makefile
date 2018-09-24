@@ -11,12 +11,12 @@ AR = ar.exe
 LD = g++.exe
 WINDRES = windres.exe
 
-INC = 
+INC = -I"minhook\include"
 CFLAGS = 
 RESINC = 
-LIBDIR = 
-LIB = 
-LDFLAGS = 
+LIBDIR = -L"minhook\lib"
+LIB = -l"MinHook"
+LDFLAGS =
 
 INC_RELEASE = $(INC) -I"C:\Program Files (x86)\Java\jdk1.8.0_171\include" -I"C:\Program Files (x86)\Java\jdk1.8.0_171\include\win32"
 CFLAGS_RELEASE = $(CFLAGS) -Os -Wall -std=c++1z -m32 -DBUILD_DLL
