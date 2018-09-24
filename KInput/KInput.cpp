@@ -16,7 +16,6 @@
 */
 
 #include "KInput.hpp"
-#include <windows.h>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -74,27 +73,10 @@ HWND GetCanvasHWND()
     return CanvasHandle;
 }
 
-KInput::KInput()
-{
-    this->Initialized = false;
-    this->JVM = nullptr;
-    this->Thread = nullptr;
-    this->Client = nullptr;
-    this->Canvas = nullptr;
-    this->Canvas_Class = nullptr;
-    this->Canvas_DispatchEvent = nullptr;
-    this->FocusEvent_Class = nullptr;
-    this->FocusEvent_Init = nullptr;
-    this->KeyEvent_Class = nullptr;
-    this->KeyEvent_Init = nullptr;
-    this->MouseEvent_Class = nullptr;
-    this->MouseEvent_Init = nullptr;
-    this->MouseWheelEvent_Class = nullptr;
-    this->MouseWheelEvent_Init = nullptr;
+void KInput::GrabCanvas() {
     HMODULE JVMDLL = GetModuleHandle("jvm.dll");
     if (!JVMDLL)
         return;
-    typedef int (*ptr_GCJavaVMs)(JavaVM **vmBuf, jsize bufLen, jsize * nVMs);
     ptr_GCJavaVMs GetJVMs = (ptr_GCJavaVMs)GetProcAddress(JVMDLL, "JNI_GetCreatedJavaVMs");
     jobject TempCanvas = nullptr;
     do {
@@ -106,16 +88,15 @@ KInput::KInput()
         if (!AWTDLL)
             break;
 
-        typedef jobject (JNICALL *ptr_GetComponent)(JNIEnv* env, void* platformInfo);
-        ptr_GetComponent GetComponent = (ptr_GetComponent)GetProcAddress(AWTDLL, "_DSGetComponent@8");
-        if (!(this->AttachThread() && GetComponent))
+        this->GetComponent = (ptr_GetComponent)GetProcAddress(AWTDLL, "_DSGetComponent@8");
+        if (!(this->AttachThread() && this->GetComponent))
             break;
 
         HWND CanvasHWND = GetCanvasHWND();
         if (!CanvasHWND)
             break;
 
-        TempCanvas = GetComponent(this->Thread, (void*)CanvasHWND);
+        TempCanvas = this->GetComponent(this->Thread, (void*)CanvasHWND);
         if (!TempCanvas)
             break;
 
@@ -141,6 +122,59 @@ KInput::KInput()
         this->Thread->DeleteLocalRef(TempCanvas);
         TempCanvas = nullptr;
     }
+}
+
+void KInput::NotifyCanvasUpdate(HWND CanvasHWND) {
+    this->CanvasUpdate = CanvasHWND;
+}
+
+void KInput::UpdateCanvas()
+{
+    if (!CanvasUpdate)
+        return;
+    jobject TempCanvas = nullptr;
+    do
+    {
+        if (!(this->AttachThread() && this->GetComponent))
+            break;
+        TempCanvas = this->GetComponent(this->Thread, (void*) CanvasUpdate);
+        if (!TempCanvas)
+            break;
+        if (this->Canvas)
+        {
+            this->Thread->DeleteGlobalRef(this->Canvas);
+            this->Canvas = nullptr;
+        }
+        this->Canvas = this->Thread->NewGlobalRef(TempCanvas);
+    } while (false);
+    if (TempCanvas) {
+        this->Thread->DeleteLocalRef(TempCanvas);
+        TempCanvas = nullptr;
+    }
+    CanvasUpdate = nullptr;
+}
+
+KInput::KInput()
+{
+    std::cout << "Starting a new KInput instance! o/" << std::endl;
+    this->Initialized = false;
+    this->JVM = nullptr;
+    this->Thread = nullptr;
+    this->Client = nullptr;
+    this->Canvas = nullptr;
+    this->GetComponent = nullptr;
+    this->Canvas_Class = nullptr;
+    this->Canvas_DispatchEvent = nullptr;
+    this->FocusEvent_Class = nullptr;
+    this->FocusEvent_Init = nullptr;
+    this->KeyEvent_Class = nullptr;
+    this->KeyEvent_Init = nullptr;
+    this->MouseEvent_Class = nullptr;
+    this->MouseEvent_Init = nullptr;
+    this->MouseWheelEvent_Class = nullptr;
+    this->MouseWheelEvent_Init = nullptr;
+    this->CanvasUpdate = nullptr;
+    this->GrabCanvas();
 }
 
 bool KInput::AttachThread()
@@ -171,6 +205,7 @@ bool KInput::DispatchEvent(jobject Event)
                 this->Canvas_DispatchEvent = this->Thread->GetMethodID(this->Canvas_Class, "dispatchEvent", "(Ljava/awt/AWTEvent;)V");
             if (this->Canvas_DispatchEvent)
             {
+                UpdateCanvas();
                 this->Thread->CallVoidMethod(this->Canvas, this->Canvas_DispatchEvent, Event);
                 return true;
             }

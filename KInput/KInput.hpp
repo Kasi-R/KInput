@@ -1,8 +1,13 @@
 #ifndef KINPUT_HPP_INCLUDED
 #define KINPUT_HPP_INCLUDED
 
+#include <windows.h>
 #include <jni.h>
 #include <cstdint>
+#include <mutex>
+
+typedef int (*ptr_GCJavaVMs)(JavaVM **vmBuf, jsize bufLen, jsize * nVMs);
+typedef jobject (JNICALL *ptr_GetComponent)(JNIEnv* env, void* platformInfo);
 
 class KInput
 {
@@ -12,6 +17,8 @@ class KInput
         JNIEnv* Thread;
         jobject Client;
         jobject Canvas;
+
+        ptr_GetComponent GetComponent;
 
         jclass Canvas_Class;
         jmethodID Canvas_DispatchEvent;
@@ -28,7 +35,11 @@ class KInput
         jclass MouseWheelEvent_Class;
         jmethodID MouseWheelEvent_Init;
 
+        HWND CanvasUpdate;
+
         bool AttachThread();
+        void GrabCanvas();
+        void UpdateCanvas();
     public:
         KInput();
 
@@ -41,8 +52,8 @@ class KInput
         bool MouseWheelEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t X,
                              std::int32_t Y, std::int32_t ClickCount, bool PopupTrigger, std::int32_t ScrollType,
                              std::int32_t ScrollAmount, std::int32_t WheelRotation);
+        void NotifyCanvasUpdate(HWND CanvasHWND);
         ~KInput();
-
 };
 
 #endif // KINPUT_HPP_INCLUDED
