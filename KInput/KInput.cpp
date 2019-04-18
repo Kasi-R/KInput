@@ -79,78 +79,88 @@ void KInput::GrabCanvas() {
         return;
     ptr_GCJavaVMs GetJVMs = (ptr_GCJavaVMs)GetProcAddress(JVMDLL, "JNI_GetCreatedJavaVMs");
     jobject TempCanvas = nullptr;
+    JNIEnv* Thread = nullptr;
     do {
         GetJVMs(&(this->JVM), 1, nullptr);
         if (!this->JVM)
             break;
+
+        this->AttachThread(&Thread);
 
         HMODULE AWTDLL = GetModuleHandle("awt.dll");
         if (!AWTDLL)
             break;
 
         this->GetComponent = (ptr_GetComponent)GetProcAddress(AWTDLL, "_DSGetComponent@8");
-        if (!(this->AttachThread() && this->GetComponent))
+        if (!(Thread && this->GetComponent))
             break;
 
         HWND CanvasHWND = GetCanvasHWND();
         if (!CanvasHWND)
             break;
 
-        TempCanvas = this->GetComponent(this->Thread, (void*)CanvasHWND);
+        TempCanvas = this->GetComponent(Thread, (void*)CanvasHWND);
         if (!TempCanvas)
             break;
 
-        this->Canvas = this->Thread->NewGlobalRef(TempCanvas);
+        this->Canvas = Thread->NewGlobalRef(TempCanvas);
         if (!this->Canvas)
             break;
 
-        jclass CanvasClass = this->Thread->GetObjectClass(this->Canvas);
+        if (TempCanvas)
+        {
+            Thread->DeleteLocalRef(TempCanvas);
+            TempCanvas = nullptr;
+        }
+
+        jclass CanvasClass = Thread->GetObjectClass(this->Canvas);
         if (!CanvasClass)
             break;
 
-        jmethodID Canvas_getParent = this->Thread->GetMethodID(CanvasClass, "getParent", "()Ljava/awt/Container;");
-        jobject TempClient = (jstring)this->Thread->CallObjectMethod(this->Canvas, Canvas_getParent);
+        jmethodID Canvas_getParent = Thread->GetMethodID(CanvasClass, "getParent", "()Ljava/awt/Container;");
+        jobject TempClient = (jstring)Thread->CallObjectMethod(this->Canvas, Canvas_getParent);
         if (TempClient)
         {
-            this->Client = this->Thread->NewGlobalRef(TempClient);
+            this->Client = Thread->NewGlobalRef(TempClient);
             this->Initialized = true;
-            this->Thread->DeleteLocalRef(TempClient);
+            Thread->DeleteLocalRef(TempClient);
         }
-        this->Thread->DeleteLocalRef(CanvasClass);
+        Thread->DeleteLocalRef(CanvasClass);
     } while (false);
-    if (TempCanvas) {
-        this->Thread->DeleteLocalRef(TempCanvas);
-        TempCanvas = nullptr;
-    }
+    if (Thread)
+        this->DetachThread(&Thread);
 }
 
-void KInput::NotifyCanvasUpdate(HWND CanvasHWND) {
+void KInput::NotifyCanvasUpdate(HWND CanvasHWND)
+{
     this->CanvasUpdate = CanvasHWND;
 }
 
-void KInput::UpdateCanvas()
+void KInput::UpdateCanvas(JNIEnv* Thread)
 {
     if (!CanvasUpdate)
         return;
     jobject TempCanvas = nullptr;
     do
     {
-        if (!(this->AttachThread() && this->GetComponent))
+        if (!(Thread && this->GetComponent))
             break;
-        TempCanvas = this->GetComponent(this->Thread, (void*) CanvasUpdate);
+        TempCanvas = this->GetComponent(Thread, (void*)CanvasUpdate);
         if (!TempCanvas)
             break;
         if (this->Canvas)
         {
-            this->Thread->DeleteGlobalRef(this->Canvas);
+            Thread->DeleteGlobalRef(this->Canvas);
             this->Canvas = nullptr;
         }
-        this->Canvas = this->Thread->NewGlobalRef(TempCanvas);
+        this->Canvas = Thread->NewGlobalRef(TempCanvas);
+
+        if (TempCanvas)
+        {
+            Thread->DeleteLocalRef(TempCanvas);
+            TempCanvas = nullptr;
+        }
     } while (false);
-    if (TempCanvas) {
-        this->Thread->DeleteLocalRef(TempCanvas);
-        TempCanvas = nullptr;
-    }
     CanvasUpdate = nullptr;
 }
 
@@ -159,7 +169,6 @@ KInput::KInput()
     std::cout << "Starting a new KInput instance! o/" << std::endl;
     this->Initialized = false;
     this->JVM = nullptr;
-    this->Thread = nullptr;
     this->Client = nullptr;
     this->Canvas = nullptr;
     this->GetComponent = nullptr;
@@ -177,36 +186,44 @@ KInput::KInput()
     this->GrabCanvas();
 }
 
-bool KInput::AttachThread()
+bool KInput::AttachThread(JNIEnv** Thread)
 {
-    this->Thread = nullptr;
     if (this->JVM)
-        if (this->JVM->GetEnv((void**)&(this->Thread), JNI_VERSION_1_6) == JNI_EDETACHED)
-            this->JVM->AttachCurrentThreadAsDaemon((void**)&(this->Thread), nullptr);
-    return (this->Thread);
+        if (this->JVM->GetEnv((void**)Thread, JNI_VERSION_1_6) == JNI_EDETACHED)
+            this->JVM->AttachCurrentThread((void**)Thread, nullptr);
+    return (*Thread);
 }
 
-bool KInput::DispatchEvent(jobject Event)
+bool KInput::DetachThread(JNIEnv** Thread)
 {
-    if (this->AttachThread())
+    if (*Thread)
+        if (this->JVM)
+            if (this->JVM->DetachCurrentThread() == JNI_OK)
+                *Thread = nullptr;
+    return !(*Thread);
+}
+
+bool KInput::DispatchEvent(jobject Event, JNIEnv* Thread)
+{
+    if (Thread)
     {
         if (!this->Canvas_Class)
         {
-            jclass Temp = this->Thread->FindClass("Ljava/awt/Canvas;");
+            jclass Temp = Thread->FindClass("Ljava/awt/Canvas;");
             if (Temp)
             {
-                this->Canvas_Class = (jclass)this->Thread->NewGlobalRef(Temp);
-                this->Thread->DeleteLocalRef(Temp);
+                this->Canvas_Class = (jclass)Thread->NewGlobalRef(Temp);
+                Thread->DeleteLocalRef(Temp);
             }
         }
         if (this->Canvas_Class)
         {
             if (!this->Canvas_DispatchEvent)
-                this->Canvas_DispatchEvent = this->Thread->GetMethodID(this->Canvas_Class, "dispatchEvent", "(Ljava/awt/AWTEvent;)V");
+                this->Canvas_DispatchEvent = Thread->GetMethodID(this->Canvas_Class, "dispatchEvent", "(Ljava/awt/AWTEvent;)V");
             if (this->Canvas_DispatchEvent)
             {
-                UpdateCanvas();
-                this->Thread->CallVoidMethod(this->Canvas, this->Canvas_DispatchEvent, Event);
+                this->UpdateCanvas(Thread);
+                Thread->CallVoidMethod(this->Canvas, this->Canvas_DispatchEvent, Event);
                 return true;
             }
         }
@@ -216,32 +233,35 @@ bool KInput::DispatchEvent(jobject Event)
 
 bool KInput::FocusEvent(std::int32_t ID)
 {
-    if (this->AttachThread())
+    JNIEnv* Thread = nullptr;
+    if (this->AttachThread(&Thread))
     {
         if (!this->FocusEvent_Class)
         {
-            jclass Temp = this->Thread->FindClass("Ljava/awt/event/FocusEvent;");
+            jclass Temp = Thread->FindClass("Ljava/awt/event/FocusEvent;");
             if (Temp)
             {
-                this->FocusEvent_Class = (jclass)this->Thread->NewGlobalRef(Temp);
-                this->Thread->DeleteLocalRef(Temp);
+                this->FocusEvent_Class = (jclass)Thread->NewGlobalRef(Temp);
+                Thread->DeleteLocalRef(Temp);
             }
         }
         if (this->FocusEvent_Class)
         {
             if (!this->FocusEvent_Init)
-                this->FocusEvent_Init = this->Thread->GetMethodID(this->FocusEvent_Class, "<init>", "(Ljava/awt/Component;I)V");
+                this->FocusEvent_Init = Thread->GetMethodID(this->FocusEvent_Class, "<init>", "(Ljava/awt/Component;I)V");
             if (this->FocusEvent_Init)
             {
-                jobject FocusEvent_Object = this->Thread->NewObject(this->FocusEvent_Class, this->FocusEvent_Init, this->Canvas, ID);
+                jobject FocusEvent_Object = Thread->NewObject(this->FocusEvent_Class, this->FocusEvent_Init, this->Canvas, ID);
                 if (FocusEvent_Object)
                 {
-                    bool Result = this->DispatchEvent(FocusEvent_Object);
-                    this->Thread->DeleteLocalRef(FocusEvent_Object);
+                    bool Result = this->DispatchEvent(FocusEvent_Object, Thread);
+                    Thread->DeleteLocalRef(FocusEvent_Object);
+                    this->DetachThread(&Thread);
                     return Result;
                 }
             }
         }
+        this->DetachThread(&Thread);
     }
     return false;
 }
@@ -249,33 +269,36 @@ bool KInput::FocusEvent(std::int32_t ID)
 bool KInput::KeyEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t KeyCode,
               std::uint16_t KeyChar, std::int32_t KeyLocation)
 {
-    if (this->AttachThread())
+    JNIEnv* Thread = nullptr;
+    if (this->AttachThread(&Thread))
     {
         if (!this->KeyEvent_Class)
         {
-            jclass Temp = this->Thread->FindClass("Ljava/awt/event/KeyEvent;");
+            jclass Temp = Thread->FindClass("Ljava/awt/event/KeyEvent;");
             if (Temp)
             {
-                this->KeyEvent_Class = (jclass)this->Thread->NewGlobalRef(Temp);
-                this->Thread->DeleteLocalRef(Temp);
+                this->KeyEvent_Class = (jclass)Thread->NewGlobalRef(Temp);
+                Thread->DeleteLocalRef(Temp);
             }
         }
         if (this->KeyEvent_Class)
         {
             if (!this->KeyEvent_Init)
-                this->KeyEvent_Init = this->Thread->GetMethodID(this->KeyEvent_Class, "<init>", "(Ljava/awt/Component;IJIICI)V");
+                this->KeyEvent_Init = Thread->GetMethodID(this->KeyEvent_Class, "<init>", "(Ljava/awt/Component;IJIICI)V");
             if (this->KeyEvent_Init)
             {
-                jobject KeyEvent_Object = this->Thread->NewObject(this->KeyEvent_Class, this->KeyEvent_Init, this->Canvas, ID, When,
+                jobject KeyEvent_Object = Thread->NewObject(this->KeyEvent_Class, this->KeyEvent_Init, this->Canvas, ID, When,
                                                                   Modifiers, KeyCode, KeyChar, KeyLocation);
                 if (KeyEvent_Object)
                 {
-                    bool Result = this->DispatchEvent(KeyEvent_Object);
-                    this->Thread->DeleteLocalRef(KeyEvent_Object);
+                    bool Result = this->DispatchEvent(KeyEvent_Object, Thread);
+                    Thread->DeleteLocalRef(KeyEvent_Object);
+                    this->DetachThread(&Thread);
                     return Result;
                 }
             }
         }
+        this->DetachThread(&Thread);
     }
     return false;
 }
@@ -283,34 +306,37 @@ bool KInput::KeyEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers
 bool KInput::MouseEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t X,
                 std::int32_t Y, std::int32_t ClickCount, bool PopupTrigger, std::int32_t Button)
 {
-    if (this->AttachThread())
+    JNIEnv* Thread = nullptr;
+    if (this->AttachThread(&Thread))
     {
         if (!this->MouseEvent_Class)
         {
-            jclass Temp = this->Thread->FindClass("Ljava/awt/event/MouseEvent;");
+            jclass Temp = Thread->FindClass("Ljava/awt/event/MouseEvent;");
             if (Temp)
             {
-                this->MouseEvent_Class = (jclass)this->Thread->NewGlobalRef(Temp);
-                this->Thread->DeleteLocalRef(Temp);
+                this->MouseEvent_Class = (jclass)Thread->NewGlobalRef(Temp);
+                Thread->DeleteLocalRef(Temp);
             }
         }
         if (this->MouseEvent_Class)
         {
             if (!this->MouseEvent_Init)
-                this->MouseEvent_Init = this->Thread->GetMethodID(this->MouseEvent_Class, "<init>", "(Ljava/awt/Component;IJIIIIZI)V");
+                this->MouseEvent_Init = Thread->GetMethodID(this->MouseEvent_Class, "<init>", "(Ljava/awt/Component;IJIIIIZI)V");
             if (this->MouseEvent_Init)
             {
-                jobject MouseEvent_Object = this->Thread->NewObject(this->MouseEvent_Class, this->MouseEvent_Init, this->Client, ID, When,
+                jobject MouseEvent_Object = Thread->NewObject(this->MouseEvent_Class, this->MouseEvent_Init, this->Client, ID, When,
                                                                     Modifiers, X, Y, ClickCount,
                                                                     PopupTrigger, Button);
                 if (MouseEvent_Object)
                 {
-                    bool Result = this->DispatchEvent(MouseEvent_Object);
-                    this->Thread->DeleteLocalRef(MouseEvent_Object);
+                    bool Result = this->DispatchEvent(MouseEvent_Object, Thread);
+                    Thread->DeleteLocalRef(MouseEvent_Object);
+                    this->DetachThread(&Thread);
                     return Result;
                 }
             }
         }
+        this->DetachThread(&Thread);
     }
     return false;
 }
@@ -319,77 +345,82 @@ bool KInput::MouseWheelEvent(std::int32_t ID, std::int64_t When, std::int32_t Mo
                      std::int32_t Y, std::int32_t ClickCount, bool PopupTrigger, std::int32_t ScrollType,
                      std::int32_t ScrollAmount, std::int32_t WheelRotation)
 {
-    if (this->AttachThread())
+    JNIEnv* Thread = nullptr;
+    if (this->AttachThread(&Thread))
     {
         if (!this->MouseWheelEvent_Class)
         {
-            jclass Temp = this->Thread->FindClass("Ljava/awt/event/MouseWheelEvent;");
+            jclass Temp = Thread->FindClass("Ljava/awt/event/MouseWheelEvent;");
             if (Temp)
             {
-                this->MouseWheelEvent_Class = (jclass)this->Thread->NewGlobalRef(Temp);
-                this->Thread->DeleteLocalRef(Temp);
+                this->MouseWheelEvent_Class = (jclass)Thread->NewGlobalRef(Temp);
+                Thread->DeleteLocalRef(Temp);
             }
         }
         if (this->MouseWheelEvent_Class)
         {
             if (!this->MouseWheelEvent_Init)
-                this->MouseWheelEvent_Init = this->Thread->GetMethodID(this->MouseWheelEvent_Class, "<init>", "(Ljava/awt/Component;IJIIIIZIII)V");
+                this->MouseWheelEvent_Init = Thread->GetMethodID(this->MouseWheelEvent_Class, "<init>", "(Ljava/awt/Component;IJIIIIZIII)V");
             if (this->MouseWheelEvent_Init)
             {
-                jobject MouseWheelEvent_Object = this->Thread->NewObject(this->MouseWheelEvent_Class, this->MouseWheelEvent_Init, this->Client, ID,
+                jobject MouseWheelEvent_Object = Thread->NewObject(this->MouseWheelEvent_Class, this->MouseWheelEvent_Init, this->Client, ID,
                                                                          When, Modifiers, X, Y,
                                                                          ClickCount, PopupTrigger, ScrollType, ScrollAmount,
                                                                          WheelRotation);
                 if (MouseWheelEvent_Object)
                 {
-                    bool Result = this->DispatchEvent(MouseWheelEvent_Object);
-                    this->Thread->DeleteLocalRef(MouseWheelEvent_Object);
+                    bool Result = this->DispatchEvent(MouseWheelEvent_Object, Thread);
+                    Thread->DeleteLocalRef(MouseWheelEvent_Object);
+                    this->DetachThread(&Thread);
                     return Result;
                 }
             }
         }
+        this->DetachThread(&Thread);
     }
     return false;
 }
 
 KInput::~KInput()
 {
-    if (this->AttachThread())
+    JNIEnv* Thread = nullptr;
+    if (this->AttachThread(&Thread))
     {
         if (this->Canvas)
         {
-            this->Thread->DeleteGlobalRef(this->Canvas);
+            Thread->DeleteGlobalRef(this->Canvas);
             this->Canvas = nullptr;
         }
         if (this->Client)
         {
-            this->Thread->DeleteGlobalRef(this->Client);
+            Thread->DeleteGlobalRef(this->Client);
             this->Client = nullptr;
         }
         if (this->Canvas_Class)
         {
-            this->Thread->DeleteGlobalRef(this->Canvas_Class);
+            Thread->DeleteGlobalRef(this->Canvas_Class);
             this->Canvas_Class = nullptr;
         }
         if (this->FocusEvent_Class)
         {
-            this->Thread->DeleteGlobalRef(this->FocusEvent_Class);
+            Thread->DeleteGlobalRef(this->FocusEvent_Class);
             this->FocusEvent_Class = nullptr;
         }
         if (this->KeyEvent_Class)
         {
-            this->Thread->DeleteGlobalRef(this->KeyEvent_Class);
+            Thread->DeleteGlobalRef(this->KeyEvent_Class);
             this->KeyEvent_Class = nullptr;
         }
         if (this->MouseEvent_Class)
         {
-            this->Thread->DeleteGlobalRef(this->MouseEvent_Class);
+            Thread->DeleteGlobalRef(this->MouseEvent_Class);
             this->MouseEvent_Class = nullptr;
         }
         if (this->MouseWheelEvent_Class)
         {
-            this->Thread->DeleteGlobalRef(this->MouseWheelEvent_Class);
+            Thread->DeleteGlobalRef(this->MouseWheelEvent_Class);
             this->MouseWheelEvent_Class = nullptr;
         }
+        this->DetachThread(&Thread);
     }
 }

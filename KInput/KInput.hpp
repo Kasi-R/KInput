@@ -14,7 +14,6 @@ class KInput
     private:
         bool Initialized;
         JavaVM* JVM;
-        JNIEnv* Thread;
         jobject Client;
         jobject Canvas;
 
@@ -37,13 +36,14 @@ class KInput
 
         HWND CanvasUpdate;
 
-        bool AttachThread();
+        bool AttachThread(JNIEnv** Thread);
+        bool DetachThread(JNIEnv** Thread);
         void GrabCanvas();
-        void UpdateCanvas();
+        void UpdateCanvas(JNIEnv* Thread);
     public:
         KInput();
 
-        bool DispatchEvent(jobject Event);
+        bool DispatchEvent(jobject Event, JNIEnv* Thread);
         bool FocusEvent(std::int32_t ID);
         bool KeyEvent(std::int32_t ID, std::int64_t When, std::int32_t Modifiers, std::int32_t KeyCode,
                       std::uint16_t KeyChar, std::int32_t KeyLocation);
